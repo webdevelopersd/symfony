@@ -196,7 +196,7 @@ END:VCALENDAR";
                   'label' => 'Is candidate',
                   'choices'  => [
                       'Yes' => 1,
-                      'Transfer to section "Who is already in association Хто вже в асоціації"' => 0
+                      'Transfer to section "Who is already in association"' => 0
                   ],
               ])
       ->add('email')
@@ -258,7 +258,7 @@ END:VCALENDAR";
       ->end()
       ->end()
       ->tab('Additional information')
-      ->with('Іnformation', ['class' => 'col-md-9'])
+      ->with('Information', ['class' => 'col-md-9'])
       ->add('userAdditionalInfo.lastname', null, ['label' => 'Last name'])
       ->add('userAdditionalInfo.firstname', null, ['label' => 'First name'])
       ->add('userAdditionalInfo.patronymic', null, ['label' => 'Patronymic'])
