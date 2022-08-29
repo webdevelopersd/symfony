@@ -1,0 +1,356 @@
+  // ================================================
+  // Parts of Event controller
+  // ================================================
+
+    /**
+     * @Route("/get-ics/{eventId}", name="event_outlook_ics")
+     * @param int $eventId
+     * @return Response
+     */
+    public function getOutlookCalendarIcs(int $eventId)
+    {
+        /** @var Event $event */
+        $event = $this->eventRepository->find($eventId);
+
+        if (empty($event)) {
+            throw new NotFoundHttpException();
+        }
+
+      $ical = "BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+CLASS:PUBLIC
+CREATED:" . $event->getCreatedAt()->format('Ymd') . "T" . $event->getCreatedAt()->format('His') . "Z
+DESCRIPTION:" . $event->translate()->getTitle() . "
+DTEND;TZID=Europe/Kiev:" . $event->getEndDatetime()->format('Ymd') . "T" . $event->getEndDatetime()->format('His') . "
+DTSTAMP:" . gmdate('Ymd') . 'T' .  gmdate('His') . "Z
+DTSTART;TZID=Europe/Kiev:" . $event->getStartDatetime()->format('Ymd') . "T" . $event->getStartDatetime()->format('His') . "
+LOCATION:" . $event->translate()->getPlace() . "
+PRIORITY:5
+SEQUENCE:0
+SUMMARY;LANGUAGE=uk:" . $event->translate()->getTitle() . "
+TRANSP:OPAQUE
+UID:" . md5(uniqid((string) mt_rand(), true)) . "
+X-MICROSOFT-CDO-BUSYSTATUS:BUSY
+X-MICROSOFT-CDO-IMPORTANCE:1
+X-MICROSOFT-DISALLOW-COUNTER:FALSE
+X-MS-OLK-AUTOFILLLOCATION:FALSE
+X-MS-OLK-CONFTYPE:0
+BEGIN:VALARM
+TRIGGER:-PT15M
+ACTION:DISPLAY
+DESCRIPTION:Reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR";
+      
+        $response = new Response($ical);
+
+        $response->headers->set('Content-type', 'text/calendar');
+        $response->headers->set('Content-Disposition', 'filename=calendar.ics');
+
+        return  $response;
+    }
+  
+  /**
+   * @Route("/get-promocode", name="get-promocode")
+   *
+   * @param Request $request
+   * @return Response
+   * @throws \Doctrine\ORM\ORMException
+   * @throws \Doctrine\ORM\OptimisticLockException
+   */
+  public function getPromocode(Request $request)
+  {
+    if ($request->getMethod() == 'POST') {
+      $user          = $this->getUser();
+      /** @var Event $event */
+      $event = $this->eventRepository->findOneBy(['slug' => $request->request->get('event_slug')]);
+      if( $event->getCode() === $request->request->get('code')){
+        $res = array("status"=>'SUCCESS', "id"=>$event->getId(),
+          'decrease_type'=>$event->getDecreaseType(),
+          'decrease_value'=>$event->getDecreaseValue());
+        $decrease_value = $event->getDecreaseValue();
+        $decrease_type=$event->getDecreaseType();
+        /** @var UserPayment $payment */
+        $userPayment = $this->userPaymentRepository->find($request->request->get('payment_id'));
+
+        $base_price = $userPayment->getAmount();
+        $newprice = $base_price;
+  
+        if($decrease_value>0){
+          if($decrease_type=='Percent') {
+            $newprice = round($base_price - $base_price * $decrease_value / 100, 0);
+          } else{
+            $newprice = max(round($base_price  - $decrease_value, 0),0);
+          }
+        }
+        
+        $formView = $this->wayForPayApiService->getFormForPayment(
+          $userPayment->getId(),
+          intval($newprice),
+          self::UAH,
+          (string) $userPayment->getUser()->getUserAdditionalInfo()->getFirstname(),
+          (string) $userPayment->getUser()->getUserAdditionalInfo()->getLastname(),
+          $userPayment->getUser()->getEmail(),
+          (string) $userPayment->getUser()->getUserContact()->getMobilePhone(),
+          (string) $userPayment->getEventRegistration()->getEvent()->translate()->getTitle(),
+          $this->generateUrl('event_registration_finish',
+            [
+              'eventRegistration' => $userPayment->getEventRegistration()->getId()
+            ],
+            UrlGeneratorInterface::ABSOLUTE_URL
+          )
+        );
+        $res['formView']=$formView;
+        $res['price']=$base_price;
+        $res['newprice']=$newprice;
+      } else {
+        $res = array("status"=>'BADCODE');
+      }
+      
+      $response = new Response(json_encode($res));
+      $response->headers->set('Content-Type', 'application/json');
+      return $response;
+    }
+    
+    return new Response('fail');
+  }
+  
+  // =================================================
+  // Another Controller
+  // =================================================
+    /**
+   * Returns a JSON string with the cities of the Comitet (type=2, regional department)
+   * @Route("/get-cities", name="get-cities")
+   * @param Request $request
+   * @return JsonResponse
+   */
+  public function listCitiesOfComitetAction(Request $request)
+  {
+    $regional_department_id = $request->get("regional_department");
+    $region = $request->get('region');
+    $section = $request->get('section');
+    $yearFinishHighSchool = $request->get('year');
+    $comitetsIds = $request->get('comitets');
+    $memberStatus = $request->get('memberStatus');
+    $comitetCityId = 0;
+    $cities = $this->comitetCityRepository->createQueryBuilder("q")
+      ->where("q.comitet = :comitetid")
+      ->setParameter("comitetid", $regional_department_id)
+      ->getQuery()
+      ->getResult();
+    $responseArray = array();
+    foreach($cities as $k=>$city){
+      if($k==0) $comitetCityId = $city->getId();
+      $responseArray[] = array(
+        "id" => $city->getId(),
+        "name"=>$city->translate()->getTitle()
+      );
+    }
+    $price = $this->membershipService->calculateMembershipPrice(
+      (int) $memberStatus,
+      (int) $region,
+      (int) $section,
+      (int) $yearFinishHighSchool,
+      (int) $regional_department_id,
+      (int) $comitetCityId,
+      !empty($comitetsIds) ? explode(',', $comitetsIds) : []
+    );
+    $data = [
+      'cities'=>$responseArray,
+      'suma'=>$price
+    ];
+    return new JsonResponse($data);
+  }
+  
+  
+  // ================================================
+  // Part of Admin Controller
+  // ================================================
+  
+    /**
+   * @param FormMapper $formMapper
+   */
+  protected function configureFormFields(FormMapper $formMapper): void
+  {
+    $subject = $this->getSubject();
+  
+    $types = User::getMemberTypes();
+    $translatedType = [];
+    foreach ($types as $key => $type) {
+      $translatedType[$this->trans($key)] = $type;
+    }
+  
+    $comitetRepo = $this->getConfigurationPool()->getContainer()->get('doctrine')->getRepository(Comitet::class);
+    $userDepartments = $comitetRepo->getUserComitetsByType($subject, Department::TYPE_SECTION);
+  
+    $formMapper
+      ->tab('Загальна інформація')
+      ->with('Користувач', ['class' => 'col-md-9', 'title' => ''])
+      ->add('isCandidate' , 
+        ChoiceType::class,
+              [
+                  'required'   => false,
+                  'label' => 'Є кандидатом на вступ',
+                  'choices'  => [
+                      'Так' => 1,
+                      'Перенести до розділу "Хто вже в асоціації"' => 0
+                  ],
+              ])
+      ->add('email')
+      ->add('username');
+    if ( is_null($subject->getId()) ) {
+      $formMapper
+        ->add('plainPassword', TextType::class, [
+          'label' => 'Пароль',
+          'required' => true
+        ]);
+    }
+    $formMapper
+      ->add('memberStatus', null, [
+        'label' => 'Статус членства',
+        'required' => false
+      ])
+      ->add('yearSum', null, [
+        'label' => 'Річний внесок',
+        'required' => false
+      ])
+      ->add('yearSumDueDate', DatePickerType::class, [
+        'label' => 'Річний внесок дійсний до'
+      ])
+      ->add('createdAt', DatePickerType::class, [
+        'label' => 'Дата вступу',
+        'required' => false
+      ])
+      ->add('comitets', null, [
+        'label' => 'Комітети',
+        'required' => false
+      ])
+      ->add('sections', ChoiceType::class, [
+        'mapped' => false,
+        'expanded' => false,
+        'disabled' => true,
+        'required' => false,
+        'label' => 'Секції',
+        'choices' => $userDepartments
+      ])
+      ->add('membershipFeeType', null,
+        ['label' => 'Вступний і щорічний членські внески',
+          'required' => false]
+      )
+      ->add('eventRegistrations', null, [
+        'disabled' => true,
+        'required' => false
+      ])
+      ->add('regionalDepartment', null,
+        ['label' => 'Відділення',
+          'required' => false])
+      ->add('comitetCity', EntityType::class,
+        ['label' => 'Місто',
+          'class' => ComitetCity::class,
+          'required' => false])
+      ->add('department')
+      ->end()
+      ->with('Контактна інформація', ['class' => 'col-md-3'])
+      ->add('userContact', UserContactType::class)
+      ->end()
+      ->end()
+      ->tab('Додаткова інформація')
+      ->with('Інформація', ['class' => 'col-md-9'])
+      ->add('userAdditionalInfo.lastname', null, ['label' => 'Прiзвище'])
+      ->add('userAdditionalInfo.firstname', null, ['label' => 'Iм`я'])
+      ->add('userAdditionalInfo.patronymic', null, ['label' => 'По батьковi'])
+      ->add('userAdditionalInfo.workplace', null, ['label' => 'Мicце роботи'])
+      ->add('userAdditionalInfo.workAddress', null, ['label' => 'Робоча адреса'])
+      ->add('userAdditionalInfo.homeAddress', null, ['label' => 'Домашня адреса'])
+      ->add('userAdditionalInfo.post', null, ['label' => 'Посада'])
+      ->end()
+      ->end();
+  }
+  
+  
+  
+  // ================================================
+  // Part of view with script
+  // ================================================
+  {% block vich_file_widget %}
+    <div class="parent">
+        <div class="hidden">
+            {{ form_widget(form.file) }}
+        </div>
+        <div class="hidden uploaded-link"></div>
+        {% if download_uri is defined and download_uri %}
+            <a target="_blank" class="old-file" href="{{ download_uri }}">Download</a>
+        {% else %}
+            <a target="_blank" class="hidden empty-download-link">Download</a>
+        {% endif %}
+        <div class="upload-btn-wrap">
+            <a href="javascript:void(0)" class="upload-file-btn btn btn-default">Upload</a>
+        </div>
+        {% if form.delete is defined %}
+            {{ form_row(form.delete) }}
+        {% endif %}
+        <script>
+            function readFileURL(input) {
+                var $parent = $(input).parent().parent();
+                if (input.files && input.files[0]) {
+                    $('.old-file').addClass('hidden');
+                    $('.empty-download-link', $parent).removeClass('hidden').attr('href', URL.createObjectURL(input.files[0]));
+                    let reader = new FileReader();
+                    reader.readAsDataURL(input.files[0]);
+                    reader.onload = (function(f,obj) {
+                    return function(e) {
+                      obj['ob'].removeClass('hidden').html(f.name);
+                    };
+                  })(input.files[0],{ ob: $('.uploaded-link', $parent)});
+                }
+            }
+            $('input[type="file"]').change(function(){
+                readFileURL(this);
+            });
+            $('.upload-file-btn').off('click').on('click', function () {
+                $(this).closest('.parent').find('input[type="file"]').trigger('click');
+            });
+        </script>
+    </div>
+  {% endblock %}
+  
+  
+  // ================================================
+  // Part of view
+  // ================================================
+  
+    <div class="form__item">
+        <div class="form__field form__field-required" data-type="text" data-limit="2">
+            {% set patronymicplaceholder = 'user.placeholder.patronymic'|trans %}
+            {{ form_widget(form.userAdditionalInfo.patronymic, { 'attr': {'placeholder': patronymicplaceholder} }) }}
+            <div style="font-size: x-small;color: red">* - {{ 'general.mandatory_field'|trans }}</div>
+            <div class="error__message">
+                {{ 'user.placeholder.special_symbols'|trans }}
+            </div>
+        </div>
+    </div>
+    {% for choice in form.userAdditionalInfo.sex.vars.choices %}
+        <div class="form__item">
+            <div class="radio__wrap">
+                <label>
+                    <input type="radio" value="{{ choice.value }}" name="user[userAdditionalInfo][sex]">
+                    <div class="radio__decor"></div>
+                    <div class="radio__title">
+                        {{ choice.label|raw }}
+                    </div>
+                </label>
+            </div>
+        </div>
+    {% endfor %}
+    <div id="birthday-field-wrap" class="form__item form__item-indent">
+        <div class="form__field form__item-date">
+            <div class="form__label">{{ 'user.placeholder.birthday'|trans }}</div>
+            <input type="text" id="birthday-field" name="user[userAdditionalInfo][birthday]" data-type="text" data-limit="2">
+            <div class="error__message"></div>
+        </div>
+    </div>  
+  
+  
