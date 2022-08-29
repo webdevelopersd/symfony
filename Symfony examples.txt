@@ -187,16 +187,16 @@ END:VCALENDAR";
     $userDepartments = $comitetRepo->getUserComitetsByType($subject, Department::TYPE_SECTION);
   
     $formMapper
-      ->tab('Загальна інформація')
-      ->with('Користувач', ['class' => 'col-md-9', 'title' => ''])
+      ->tab('General information')
+      ->with('User', ['class' => 'col-md-9', 'title' => ''])
       ->add('isCandidate' , 
         ChoiceType::class,
               [
                   'required'   => false,
-                  'label' => 'Є кандидатом на вступ',
+                  'label' => 'Is candidate',
                   'choices'  => [
-                      'Так' => 1,
-                      'Перенести до розділу "Хто вже в асоціації"' => 0
+                      'Yes' => 1,
+                      'Transfer to section "Who is already in association Хто вже в асоціації"' => 0
                   ],
               ])
       ->add('email')
@@ -204,28 +204,28 @@ END:VCALENDAR";
     if ( is_null($subject->getId()) ) {
       $formMapper
         ->add('plainPassword', TextType::class, [
-          'label' => 'Пароль',
+          'label' => 'Password',
           'required' => true
         ]);
     }
     $formMapper
       ->add('memberStatus', null, [
-        'label' => 'Статус членства',
+        'label' => 'Membership status',
         'required' => false
       ])
       ->add('yearSum', null, [
-        'label' => 'Річний внесок',
+        'label' => 'Annual fee',
         'required' => false
       ])
       ->add('yearSumDueDate', DatePickerType::class, [
-        'label' => 'Річний внесок дійсний до'
+        'label' => 'The annual fee is valid until'
       ])
       ->add('createdAt', DatePickerType::class, [
-        'label' => 'Дата вступу',
+        'label' => 'Admission date',
         'required' => false
       ])
       ->add('comitets', null, [
-        'label' => 'Комітети',
+        'label' => 'Committes',
         'required' => false
       ])
       ->add('sections', ChoiceType::class, [
@@ -233,11 +233,11 @@ END:VCALENDAR";
         'expanded' => false,
         'disabled' => true,
         'required' => false,
-        'label' => 'Секції',
+        'label' => 'Departments',
         'choices' => $userDepartments
       ])
       ->add('membershipFeeType', null,
-        ['label' => 'Вступний і щорічний членські внески',
+        ['label' => 'Entry and annual membership fees',
           'required' => false]
       )
       ->add('eventRegistrations', null, [
@@ -245,27 +245,27 @@ END:VCALENDAR";
         'required' => false
       ])
       ->add('regionalDepartment', null,
-        ['label' => 'Відділення',
+        ['label' => 'Department',
           'required' => false])
       ->add('comitetCity', EntityType::class,
-        ['label' => 'Місто',
+        ['label' => 'City',
           'class' => ComitetCity::class,
           'required' => false])
       ->add('department')
       ->end()
-      ->with('Контактна інформація', ['class' => 'col-md-3'])
+      ->with('Contact information', ['class' => 'col-md-3'])
       ->add('userContact', UserContactType::class)
       ->end()
       ->end()
-      ->tab('Додаткова інформація')
-      ->with('Інформація', ['class' => 'col-md-9'])
-      ->add('userAdditionalInfo.lastname', null, ['label' => 'Прiзвище'])
-      ->add('userAdditionalInfo.firstname', null, ['label' => 'Iм`я'])
-      ->add('userAdditionalInfo.patronymic', null, ['label' => 'По батьковi'])
-      ->add('userAdditionalInfo.workplace', null, ['label' => 'Мicце роботи'])
-      ->add('userAdditionalInfo.workAddress', null, ['label' => 'Робоча адреса'])
-      ->add('userAdditionalInfo.homeAddress', null, ['label' => 'Домашня адреса'])
-      ->add('userAdditionalInfo.post', null, ['label' => 'Посада'])
+      ->tab('Additional information')
+      ->with('Іnformation', ['class' => 'col-md-9'])
+      ->add('userAdditionalInfo.lastname', null, ['label' => 'Last name'])
+      ->add('userAdditionalInfo.firstname', null, ['label' => 'First name'])
+      ->add('userAdditionalInfo.patronymic', null, ['label' => 'Patronymic'])
+      ->add('userAdditionalInfo.workplace', null, ['label' => 'Workplace'])
+      ->add('userAdditionalInfo.workAddress', null, ['label' => 'Work address'])
+      ->add('userAdditionalInfo.homeAddress', null, ['label' => 'Home address'])
+      ->add('userAdditionalInfo.post', null, ['label' => 'Position'])
       ->end()
       ->end();
   }
